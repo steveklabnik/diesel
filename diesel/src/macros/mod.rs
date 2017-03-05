@@ -177,6 +177,23 @@ macro_rules! __diesel_column {
 /// # }
 /// ```
 ///
+/// If you are using types that aren't from Diesel's core types, you can specify
+/// which types to import. Note that the path given has to be an absolute path
+/// relative to the crate root. You cannot use `self` or `super`.
+///
+/// ```ignore
+/// #[macro_use] extern crate diesel;
+/// extern crate diesel_full_text_search;
+///
+/// table! {
+///     posts using types from diesel::types, diesel_full_text_search::types {
+///         id -> Integer,
+///         title -> Text,
+///         keywords -> TsVector,
+///     }
+/// }
+/// ```
+///
 /// This module will also contain several helper types:
 ///
 /// dsl
@@ -223,46 +240,80 @@ macro_rules! __diesel_column {
 #[macro_export]
 macro_rules! table {
     (
-        $name:ident $body:tt
+        $name:ident {$($body:tt)*}
     ) => {
         table! {
-            public . $name (id) $body
+            public . $name (id) using types from $crate::types {$($body)*}
         }
     };
 
     (
-        $schema_name:ident . $name:ident $body:tt
+        $name:ident using types from $($($type_mod:ident)::+),+ {$($body:tt)*}
     ) => {
         table! {
-            $schema_name . $name (id) $body
+            public . $name (id) using types from $($($type_mod)::+),+ {$($body)*}
         }
     };
 
     (
-        $name:ident $pk:tt $body:tt
+        $schema_name:ident . $name:ident {$($body:tt)*}
     ) => {
         table! {
-            public . $name $pk $body
+            $schema_name . $name (id) using types from $crate::types {$($body)*}
         }
     };
 
     (
-        $schema_name:ident . $name:ident ($pk:ident) $body:tt
+        $schema_name:ident . $name:ident
+        using types from $($($type_mod:ident)::+),+
+        {$($body:tt)*}
+    ) => {
+        table! {
+            $schema_name . $name (id) using types from $($($type_mod)::+),+ {$($body)*}
+        }
+    };
+
+    (
+        $name:ident $pk:tt {$($body:tt)*}
+    ) => {
+        table! {
+            public . $name $pk using types from $crate::types {$($body)*}
+        }
+    };
+
+    (
+        $schema_name:ident . $name:ident $pk:tt {$($body:tt)*}
+    ) => {
+        table! {
+            $schema_name . $name $pk using types from $crate::types {$($body)*}
+        }
+    };
+
+    (
+        $name:ident $pk:tt
+        using types from $($($type_mod:ident)::+),+
+        {$($body:tt)*}
+    ) => {
+        table! {
+            public . $name $pk using types from $($($type_mod)::+),+ {$($body)*}
+        }
+    };
+
+    (
+        $schema_name:ident . $name:ident ($pk:ident)
+        $($body:tt)*
     ) => {
         table_body! {
-            $schema_name . $name ($pk) $body
+            $schema_name . $name ($pk) $($body)*
         }
     };
 
     (
-        $schema_name:ident . $name:ident ($pk:ident, $($composite_pk:ident),+) {
-            $($column_name:ident -> $Type:ty,)+
-        }
+        $schema_name:ident . $name:ident ($pk:ident, $($composite_pk:ident),+)
+        $($body:tt)*
     ) => {
         table_body! {
-            $schema_name . $name ($pk, $($composite_pk,)+) {
-                $($column_name -> $Type,)+
-            }
+            $schema_name . $name ($pk, $($composite_pk,)+) $($body)*
         }
     };
 }
@@ -271,7 +322,9 @@ macro_rules! table {
 #[doc(hidden)]
 macro_rules! table_body {
     (
-        $schema_name:ident . $name:ident ($pk:ident) {
+        $schema_name:ident . $name:ident ($pk:ident)
+        using types from $($($type_mod:ident)::+),+
+        {
             $($column_name:ident -> $Type:ty,)+
         }
     ) => {
@@ -281,11 +334,14 @@ macro_rules! table_body {
             primary_key_ty = columns::$pk,
             primary_key_expr = columns::$pk,
             columns = [$($column_name -> $Type,)+],
+            use_types_from = ($($($type_mod)::+),+),
         }
     };
 
     (
-        $schema_name:ident . $name:ident ($($pk:ident,)+) {
+        $schema_name:ident . $name:ident ($($pk:ident,)+)
+        using types from $($($type_mod:ident)::+),+
+        {
             $($column_name:ident -> $Type:ty,)+
         }
     ) => {
@@ -295,6 +351,7 @@ macro_rules! table_body {
             primary_key_ty = ($(columns::$pk,)+),
             primary_key_expr = ($(columns::$pk,)+),
             columns = [$($column_name -> $Type,)+],
+            use_types_from = ($($($type_mod)::+),+),
         }
     };
 
@@ -304,6 +361,7 @@ macro_rules! table_body {
         primary_key_ty = $primary_key_ty:ty,
         primary_key_expr = $primary_key_expr:expr,
         columns = [$($column_name:ident -> $column_ty:ty,)+],
+        use_types_from = ($($($types_mod:ident)::+),+),
     ) => {
         pub mod $table_name {
             #![allow(dead_code)]
@@ -315,7 +373,7 @@ macro_rules! table_body {
             use $crate::associations::HasTable;
             use $crate::query_builder::*;
             use $crate::query_builder::nodes::{Identifier, InfixNode};
-            use $crate::types::*;
+            $(use $($types_mod)::+::*;)+
             pub use self::columns::*;
 
             pub mod dsl {
@@ -389,7 +447,7 @@ macro_rules! table_body {
                 use $crate::backend::Backend;
                 use $crate::query_builder::{QueryBuilder, BuildQueryResult, QueryFragment};
                 use $crate::result::QueryResult;
-                use $crate::types::*;
+                $(use $($types_mod)::+::*;)+
 
                 #[allow(non_camel_case_types, dead_code)]
                 #[derive(Debug, Clone, Copy)]
@@ -632,6 +690,17 @@ mod tests {
         foo.bars {
             id -> Integer,
             baz -> Text,
+        }
+    }
+
+    mod my_types {
+        pub struct MyCustomType;
+    }
+
+    table! {
+        table_with_custom_types using types from types, macros::tests::my_types {
+            id -> Integer,
+            my_type -> MyCustomType,
         }
     }
 

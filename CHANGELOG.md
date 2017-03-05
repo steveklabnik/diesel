@@ -17,6 +17,11 @@ for Rust libraries in [RFC #1105](https://github.com/rust-lang/rfcs/blob/master/
 
 [pg-money-0.12.0]: https://www.postgresql.org/docs/9.6/static/datatype-money.html
 
+* The `table!` macro now allows you to use types from crates outside of Diesel.
+  You can specify where types should be imported from by doing:
+  `table! { foo using types from some_module`. Not specifying any any modules
+  is equivalent to `using types from diesel::types`.
+
 ### Fixed
 
 * `diesel_codegen` will provide a more useful error message when it encounters
